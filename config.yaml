@@ -1,0 +1,42 @@
+# ===== קריטריונים לחיפוש =====
+search:
+  cities:            # מזהי ערים של יד 2
+    - {id: 8600, name: "רמת גן"}
+    - {id: 6300, name: "גבעתיים"}
+    - {id: 5000, name: "תל אביב יפו"}
+  region: 3          # "תל אביב והסביבה" ב-API של יד 2
+  max_price: 7500
+  min_rooms: 3
+
+rules:
+  # מעל הקומה הזו חייבת להיות מעלית (1 = קומה 2 ומעלה מחייבת מעלית)
+  elevator_required_above_floor: 1
+  # מודעה דרך מתווך מתקבלת רק אם המחיר עד הסכום הזה
+  broker_max_price: 6800
+  # מחיר נמוך מזה לדירת 3 חדרים באזור כנראה טעות/חניה/חדר - מסומן לבירור
+  suspicious_price_below: 4000
+  pets_required: true          # "לא" מפורש = פסילה, לא צוין = דורש בירור
+  kitchen_not_small: true      # "מטבח קטן/מטבחון" = פסילה, לא צוין = דורש בירור
+  excluded_property_types: ["סאבלט", "החלפת דירות", "חניה", "מחסן", "דירת נופש", "מבנים ניידים/קרוואן"]
+
+# שכונות מועדפות (מזהה שכונה ביד 2 -> שם)
+priority_neighborhoods:
+  1479: "מרום נווה, רמת יצחק"
+  240: "שיכון הותיקים"
+  237: "נגבה"
+  238: "נווה רם, שיכון מזרחי"
+
+# ===== הרצה =====
+run:
+  every_minutes: 60            # לפקודת loop
+  max_details_per_run: 60      # כמה מודעות לפתוח לעומק בכל ריצה (עדינות מול השרת)
+  delay_seconds: [4, 9]        # השהיה אקראית בין בקשות
+  notify_on_first_run: false   # בריצה הראשונה לא להציף - רק סיכום
+  notify_check_listings: true  # לשלוח גם מודעות שדורשות בירור (לא רק התאמות מלאות)
+
+llm:
+  enabled: true                # פעיל רק אם יש ANTHROPIC_API_KEY
+  model: "claude-opus-5-5"     # אפשר להחליף ל-claude-haiku-5-5 (זול בהרבה)
+  effort: "low"
+
+db_path: "data/hunter.db"
