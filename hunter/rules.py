@@ -23,6 +23,11 @@ KITCHEN_SMALL = [r"מטבח\s*(?:קטן|צר|קטנטן)", r"מטבחון", r"פ
 KITCHEN_BIG = [r"מטבח\s*(?:גדול|מרווח|ענק|רחב|גדול\s*ומאובזר)", r"מטבח\s*\S*\s*(?:גדול|מרווח)"]
 NO_BROKER = [r"ללא\s*(?:דמי\s*)?תיווך", r"בלי\s*(?:דמי\s*)?תיווך", r"לא\s*תיווך", r"ללא\s*מתווכים", r"מתווכים\s*לא"]
 BROKER = [r"דמי\s*תיווך", r"עמלת\s*תיווך", r"\bתיווך\b"]
+PARKING_PRIVATE = [r"חני{1,2}ה\s*(?:פרטית|צמודה|בטאבו|מקורה|בבניין|תת\s*קרקעית|משותפת)", r"כולל\s*חני{1,2}ה",
+                   r"מקום\s*חני{1,2}ה", r"\d\s*חניות", r"חני{1,2}ה\s*ל-?\s*\d\s*רכבים", r"private\s*parking"]
+PARKING_EASY = [r"חני{1,2}ה\s*(?:ברחוב\s*)?בשפע", r"שפע\s*(?:של\s*)?חני{1,2}ה", r"(?:קל|קלה|נוח)\s*(?:מאוד\s*)?(?:למצוא\s*)?חני{1,2}ה",
+                r"אין\s*בעי(?:ה|ית)\s*חני{1,2}ה", r"חני{1,2}ה\s*(?:חופשית|קלה|נוחה)\s*(?:ברחוב|בסביבה)?", r"easy\s*parking"]
+PARKING_HARD = [r"(?:קשה|בעייתי)\s*(?:למצוא\s*)?חני{1,2}ה", r"בעיית\s*חני{1,2}ה", r"אין\s*חני{1,2}ה", r"ללא\s*חני{1,2}ה"]
 ROOMMATE_AD = [r"(?:מחפש|מחפשת|מחפשים|דרוש|דרושה)\s*(?:\S+\s*)?שות[פף]", r"חדר\s*(?:להשכרה\s*)?בדירת\s*שותפים"]
 
 
@@ -41,7 +46,16 @@ def keyword_signals(text: str) -> dict:
         broker = True
     else:
         broker = None
-    return {"pets": pets, "kitchen": kitchen, "broker": broker, "roommate_ad": _any(ROOMMATE_AD, text)}
+    if _any(PARKING_PRIVATE, text):
+        parking = "private"
+    elif _any(PARKING_EASY, text):
+        parking = "street_easy"
+    elif _any(PARKING_HARD, text):
+        parking = "street_hard"
+    else:
+        parking = None
+    return {"pets": pets, "kitchen": kitchen, "broker": broker, "parking": parking,
+            "roommate_ad": _any(ROOMMATE_AD, text)}
 
 
 @dataclass
@@ -51,9 +65,11 @@ class Analysis:
     reasons: list = field(default_factory=list)   # why rejected
     flags: list = field(default_factory=list)     # needs confirmation
     pluses: list = field(default_factory=list)    # nice things
+    warnings: list = field(default_factory=list)  # informational notes from Claude (don't change verdict)
     priority: bool = False
     pets: Optional[bool] = None
     kitchen: Optional[str] = None
+    parking: Optional[str] = None
     summary: str = ""
     llm_used: bool = False
 
@@ -61,13 +77,29 @@ class Analysis:
         return asdict(self)
 
 
+def _norm(t: str) -> str:
+    return re.sub(r"[\"'״׳\-,.()]", " ", t or "").replace("הותיקים", "ותיקים").replace("  ", " ").strip()
+
+
+def is_priority(listing: Listing, cfg: dict) -> bool:
+    if listing.neighborhood_id in cfg["priority_neighborhoods"]:
+        return True
+    if listing.city_id not in (None, 8600):  # all priority neighborhoods are in Ramat Gan
+        return False
+    hay = _norm(" ".join([listing.neighborhood or "", listing.street or "",
+                          listing.description if listing.source != "yad2" else ""]))
+    return any(_norm(name) in hay for name in cfg.get("priority_neighborhood_names", []))
+
+
 def prefilter(listing: Listing, cfg: dict) -> list[str]:
     """Cheap checks on feed data only (before fetching details). Returns reject reasons."""
     s, r = cfg["search"], cfg["rules"]
     reasons = []
     allowed_cities = {c["id"] for c in s["cities"]}
+    if listing.is_rental_offer is False:
+        reasons.append("לא מודעת השכרה (מחפשים דירה / מכירה / סאבלט וכו')")
     if listing.city_id and listing.city_id not in allowed_cities:
-        reasons.append(f"עיר לא ברשימה ({listing.city})")
+        reasons.append(f"עיר לא ברשימה ({listing.city or 'אחר'})")
     if listing.price and listing.price > s["max_price"]:
         reasons.append(f"מחיר {listing.price:,} מעל {s['max_price']:,}")
     if listing.rooms is not None and listing.rooms < s["min_rooms"]:
@@ -107,6 +139,12 @@ def analyze(listing: Listing, cfg: dict, llm: Optional[dict] = None) -> Analysis
     # --- roommates ad ---
     if kw["roommate_ad"] or llm.get("roommates_ad"):
         a.reasons.append("מודעת שותפים / חדר בדירה")
+
+    # --- missing basics (mostly facebook posts) ---
+    if not listing.city_id:
+        a.flags.append("עיר לא צוינה")
+    if listing.rooms is None:
+        a.flags.append("מספר חדרים לא צוין")
 
     # --- price ---
     if not listing.price:
@@ -149,11 +187,16 @@ def analyze(listing: Listing, cfg: dict, llm: Optional[dict] = None) -> Analysis
         elif kitchen == "large":
             a.pluses.append("מטבח גדול")
 
-    for extra in llm.get("red_flags") or []:
-        a.flags.append(f"⚠ {extra}")
+    a.warnings = list(llm.get("red_flags") or [])
+
+    # --- parking (big bonus; private > plentiful street parking) ---
+    parking = listing.parking_type or ("private" if listing.parking else None) or kw["parking"]
+    if parking is None and llm.get("parking") not in (None, "unknown"):
+        parking = llm["parking"]
+    a.parking = parking
 
     # --- priority & score ---
-    a.priority = listing.neighborhood_id in cfg["priority_neighborhoods"]
+    a.priority = is_priority(listing, cfg)
     score = 50.0
     if a.priority:
         score += 30
@@ -161,9 +204,14 @@ def analyze(listing: Listing, cfg: dict, llm: Optional[dict] = None) -> Analysis
     score += {8600: 10, 6300: 5}.get(listing.city_id or 0, 0)
     if listing.price and listing.price >= r.get("suspicious_price_below", 0):
         score += max(0, (s["max_price"] - listing.price) / 250)
-    if listing.parking:
-        score += 4
-        a.pluses.append("חניה")
+    if parking == "private":
+        score += r.get("parking_private_bonus", 12)
+        a.pluses.append("🚗 חניה פרטית")
+    elif parking == "street_easy":
+        score += r.get("parking_street_bonus", 6)
+        a.pluses.append("🚗 חניה בשפע ברחוב")
+    elif parking in ("street_hard", "none"):
+        score -= 3
     if listing.mamad:
         score += 3
         a.pluses.append('ממ"ד')

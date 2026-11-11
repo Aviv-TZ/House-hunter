@@ -15,6 +15,8 @@ rules:
   broker_max_price: 6800
   # מחיר נמוך מזה לדירת 3 חדרים באזור כנראה טעות/חניה/חדר - מסומן לבירור
   suspicious_price_below: 4000
+  parking_private_bonus: 12    # חניה פרטית - בונוס גדול
+  parking_street_bonus: 6      # "חניה בשפע ברחוב"
   pets_required: true          # "לא" מפורש = פסילה, לא צוין = דורש בירור
   kitchen_not_small: true      # "מטבח קטן/מטבחון" = פסילה, לא צוין = דורש בירור
   excluded_property_types: ["סאבלט", "החלפת דירות", "חניה", "מחסן", "דירת נופש", "מבנים ניידים/קרוואן"]
@@ -26,6 +28,30 @@ priority_neighborhoods:
   237: "נגבה"
   238: "נווה רם, שיכון מזרחי"
 
+# שמות לזיהוי בטקסט חופשי (פייסבוק), ברמת גן
+priority_neighborhood_names: ["מרום נווה", "רמת יצחק", "שיכון ותיקים", "שיכון הותיקים", "נגבה", "שיכון מזרחי", "נווה רם"]
+
+# ===== מקורות =====
+yad2:
+  enabled: true
+
+facebook:
+  enabled: false               # להפעיל אחרי fb-login + fb-groups (ראה README)
+  every_minutes: 120           # פייסבוק - פחות תכוף מיד 2
+  groups_file: "data/fb_groups.yaml"   # נוצר ע"י: python -m hunter fb-groups
+  groups: []                   # אפשר גם ידנית: - {url: "https://www.facebook.com/groups/12345", name: "דירות ברמת גן"}
+  groups_per_run: 10           # רוטציה: בכל ריצה 10 הקבוצות שלא נבדקו הכי הרבה זמן
+  scrolls_per_group: 3
+  # Marketplace: פתח בדפדפן Marketplace > נכסים להשכרה, קבע מיקום, רדיוס, מחיר וחדרים,
+  # והעתק לכאן את הכתובת מהדפדפן. אפשר כמה כתובות (למשל אחת לכל עיר).
+  marketplace_urls:
+    - "https://www.facebook.com/marketplace/telaviv/propertyrentals?maxPrice=7500&minBedrooms=2&exact=false"
+  max_marketplace_items_per_run: 15
+  max_posts_per_run: 200
+  delay_between_pages: [15, 45]  # שניות בין עמודים
+  headless: true               # false = לראות את הדפדפן עובד
+  browser_channel: ""          # "chrome" = להשתמש ב-Google Chrome המותקן אצלך
+
 # ===== הרצה =====
 run:
   every_minutes: 60            # לפקודת loop
@@ -33,6 +59,7 @@ run:
   delay_seconds: [4, 9]        # השהיה אקראית בין בקשות
   notify_on_first_run: false   # בריצה הראשונה לא להציף - רק סיכום
   notify_check_listings: true  # לשלוח גם מודעות שדורשות בירור (לא רק התאמות מלאות)
+  max_llm_per_run: 150         # תקרת קריאות ל-Claude בריצה
 
 llm:
   enabled: true                # פעיל רק אם יש ANTHROPIC_API_KEY

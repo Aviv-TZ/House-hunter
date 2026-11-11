@@ -148,6 +148,7 @@ def listing_from_marker(m: dict) -> Listing:
         is_broker=(m.get("adType") == "commercial") if m.get("adType") else None,
         agency_name=_g(m, "customer", "agencyName", default="") or "",
         parking=True if "חניה" in tags else None,
+        parking_type="private" if "חניה" in tags else None,
         elevator=True if "מעלית" in tags else None,
         images=list(_g(m, "metaData", "images", default=[]) or [])[:10],
         created_at=_g(m, "dates", "createdAt", default="") or "",
@@ -183,6 +184,8 @@ def merge_item_details(listing: Listing, d: dict) -> Listing:
     if parking is None and details.get("parkingSpacesCount") is not None:
         parking = details.get("parkingSpacesCount", 0) > 0
     listing.parking = parking if parking is not None else listing.parking
+    if listing.parking:
+        listing.parking_type = "private"
     listing.balcony = flag("includeBalcony")
     listing.mamad = flag("includeSecurityRoom")
     listing.furnished = flag("includeFurniture")

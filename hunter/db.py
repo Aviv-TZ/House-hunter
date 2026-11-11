@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -35,7 +35,10 @@ CREATE TABLE IF NOT EXISTS listings (
     notified INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'new',
     notes TEXT NOT NULL DEFAULT '',
-    status_updated TEXT
+    status_updated TEXT,
+    dup_of TEXT,
+    dup_reason TEXT,
+    text_hash TEXT
 );
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS runs (
@@ -55,6 +58,16 @@ class DB:
         self.conn = sqlite3.connect(path)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        self._migrate()
+
+    def _migrate(self):
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(listings)")}
+        for col in ("dup_of", "dup_reason", "text_hash"):
+            if col not in cols:
+                self.conn.execute(f"ALTER TABLE listings ADD COLUMN {col} TEXT")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_hash ON listings(text_hash)")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_dup ON listings(dup_of)")
+        self.commit()
 
     def get(self, key: str) -> Optional[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM listings WHERE key=?", (key,)).fetchone()
@@ -99,17 +112,51 @@ class DB:
              analysis["verdict"], analysis["score"], int(listing.details_fetched), listing.price, listing.key),
         )
 
-    def pending_details(self, limit: int) -> list[sqlite3.Row]:
-        """Listings not yet analyzed in depth (and not already rejected from feed data)."""
-        return self.conn.execute(
-            "SELECT * FROM listings WHERE details_fetched=0 AND COALESCE(verdict,'') != 'reject' "
-            "ORDER BY first_seen DESC LIMIT ?",
-            (limit,),
-        ).fetchall()
+    def pending_details(self, limit: int, sources: Optional[tuple] = None) -> list[sqlite3.Row]:
+        """Listings not yet analyzed in depth (and not already rejected / merged)."""
+        q = ("SELECT * FROM listings WHERE details_fetched=0 AND COALESCE(verdict,'') != 'reject' "
+             "AND dup_of IS NULL")
+        args: list = []
+        if sources:
+            q += f" AND source IN ({','.join('?' * len(sources))})"
+            args += list(sources)
+        return self.conn.execute(q + " ORDER BY first_seen DESC LIMIT ?", (*args, limit)).fetchall()
+
+    # ---------- duplicates ----------
+    def set_text_hash(self, key: str, h: Optional[str]) -> None:
+        self.conn.execute("UPDATE listings SET text_hash=? WHERE key=?", (h, key))
+
+    def find_by_hash(self, h: str, exclude_key: str) -> Optional[str]:
+        """Canonical key of an earlier listing with the identical text."""
+        row = self.conn.execute(
+            "SELECT key, dup_of FROM listings WHERE text_hash=? AND key != ? ORDER BY first_seen LIMIT 1",
+            (h, exclude_key)).fetchone()
+        return (row["dup_of"] or row["key"]) if row else None
+
+    def dedup_candidates(self, exclude_key: str, days: int = 60) -> list[tuple[str, Listing]]:
+        rows = self.conn.execute(
+            "SELECT key, data FROM listings WHERE dup_of IS NULL AND details_fetched=1 AND key != ? "
+            "AND last_seen >= ? ORDER BY first_seen",
+            (exclude_key, (datetime.now() - timedelta(days=days)).isoformat(timespec="seconds"))).fetchall()
+        out = []
+        for r in rows:
+            other = Listing.from_dict(json.loads(r["data"]))
+            if other.is_rental_offer is not False:
+                out.append((r["key"], other))
+        return out
+
+    def mark_duplicate(self, key: str, canonical: str, reason: str) -> None:
+        # notified=3 -> never notify a duplicate
+        self.conn.execute("UPDATE listings SET dup_of=?, dup_reason=?, notified=3, details_fetched=1 WHERE key=?",
+                          (canonical, reason, key))
+
+    def duplicates_of(self, key: str) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM listings WHERE dup_of=? ORDER BY first_seen", (key,)).fetchall()
 
     def to_notify(self) -> list[sqlite3.Row]:
         return self.conn.execute(
             "SELECT * FROM listings WHERE notified=0 AND details_fetched=1 AND verdict IN ('match','check') "
+            "AND dup_of IS NULL "
             "ORDER BY score DESC"
         ).fetchall()
 

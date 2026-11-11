@@ -4,3 +4,7 @@ __pycache__/
 .env
 data/*.db
 data/*.db-*
+# facebook: login session, your group list and debug snapshots stay on your machine
+data/fb_profile/
+data/fb_debug/
+data/fb_groups.yaml

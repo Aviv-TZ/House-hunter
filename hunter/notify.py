@@ -25,10 +25,16 @@ def format_listing(listing: Listing, analysis: dict, price_drop_from: int | None
     lines = [
         f"{icon} {star}<b>{e(listing.address or listing.city)}</b>",
         f"💰 {e(price)} · 🛏 {listing.rooms} חד' · {listing.sqm or '?'} מ\"ר",
-        f"🏢 {floor} · {elevator}" + (" · 🚗 חניה" if listing.parking else ""),
+        f"🏢 {floor} · {elevator}",
     ]
+    parking = {"private": "🚗 חניה פרטית", "street_easy": "🚗 חניה בשפע ברחוב",
+               "street_hard": "חניה קשה באזור", "none": "בלי חניה"}.get(analysis.get("parking") or "")
+    if parking:
+        lines.append(parking)
     if listing.is_broker:
         lines.append(f"🧾 תיווך{': ' + e(listing.agency_name) if listing.agency_name else ''}")
+    if listing.phone:
+        lines.append(f"📞 {e(listing.phone)}")
     if listing.entrance_date:
         lines.append(f"📅 כניסה: {e(listing.entrance_date)}")
     if analysis.get("summary"):
@@ -37,7 +43,9 @@ def format_listing(listing: Listing, analysis: dict, price_drop_from: int | None
         lines.append("👍 " + e(" · ".join(analysis["pluses"])))
     if analysis.get("flags"):
         lines.append("❓ לבדוק: " + e(" · ".join(analysis["flags"])))
-    lines.append(f'<a href="{e(listing.url)}">פתח מודעה</a>')
+    if analysis.get("warnings"):
+        lines.append("⚠ " + e(" · ".join(analysis["warnings"])))
+    lines.append(f'📍 {e(listing.source_name)} · <a href="{e(listing.url)}">פתח מודעה</a>')
     return "\n".join(lines)
 
 

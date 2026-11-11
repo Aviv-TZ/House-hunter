@@ -25,6 +25,8 @@ class Listing:
     agency_name: str = ""
     elevator: Optional[bool] = None
     parking: Optional[bool] = None
+    # private / street_easy / street_hard / none  (None = not mentioned)
+    parking_type: Optional[str] = None
     balcony: Optional[bool] = None
     mamad: Optional[bool] = None
     furnished: Optional[bool] = None
@@ -34,6 +36,10 @@ class Listing:
     images: list = field(default_factory=list)
     created_at: str = ""
     details_fetched: bool = False
+    # free-text sources (facebook)
+    phone: str = ""
+    source_label: str = ""      # group name / "Marketplace"
+    is_rental_offer: Optional[bool] = None
 
     @property
     def key(self) -> str:
@@ -43,6 +49,12 @@ class Listing:
     def address(self) -> str:
         parts = [self.street + (f" {self.house_number}" if self.house_number else ""), self.neighborhood, self.city]
         return ", ".join(p.strip() for p in parts if p and p.strip())
+
+    @property
+    def source_name(self) -> str:
+        names = {"yad2": "יד 2", "fb_group": "פייסבוק", "fb_market": "Marketplace"}
+        base = names.get(self.source, self.source)
+        return f"{base} · {self.source_label}" if self.source_label and self.source == "fb_group" else base
 
     def to_dict(self) -> dict:
         return asdict(self)
