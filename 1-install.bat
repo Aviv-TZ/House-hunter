@@ -7,6 +7,33 @@ echo ============================================
 echo   House Hunter - installation (5-10 minutes)
 echo ============================================
 echo.
+rem --- Windows limits file paths to 260 characters; deep folders break the install ---
+set "HH_PATH=%~dp0"
+set /a HH_LEN=0
+:measure
+if defined HH_PATH (
+  set "HH_PATH=%HH_PATH:~1%"
+  set /a HH_LEN+=1
+  goto measure
+)
+if %HH_LEN% LEQ 50 goto pathok
+echo [!] This folder is too deep for Windows - file paths would pass 260 characters:
+echo     "%~dp0"
+echo.
+echo     Press any key to COPY the project to C:\House-hunter and continue the install there.
+echo     Or close this window and move the folder yourself to a short path.
+pause >nul
+robocopy "%~dp0." "C:\House-hunter" /E /XD .venv /NFL /NDL /NJH /NJS /NP >nul
+if errorlevel 8 goto copyfail
+echo [OK] Copied. Continuing in C:\House-hunter - from now on use THAT folder.
+start "" explorer "C:\House-hunter"
+call "C:\House-hunter\1-install.bat"
+exit /b
+:copyfail
+echo [!] Copy failed. Move the folder manually to C:\House-hunter and run 1-install there.
+pause
+exit /b 1
+:pathok
 rem --- find Python 3.10 or newer (older versions can't run the Claude library) ---
 set "PYCMD="
 for %%v in (3.15 3.14 3.13 3.12 3.11 3.10) do (
