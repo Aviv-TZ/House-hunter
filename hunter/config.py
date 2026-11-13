@@ -12,7 +12,7 @@ def load_env(path: Path = ROOT / ".env") -> None:
     """Minimal .env loader (KEY=VALUE lines); real env vars take precedence."""
     if not path.exists():
         return
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -25,7 +25,7 @@ def load_env(path: Path = ROOT / ".env") -> None:
 def load_config(path: str | Path | None = None) -> dict:
     load_env()
     path = Path(path) if path else ROOT / "config.yaml"
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8-sig") as f:  # utf-8-sig: Notepad may add a BOM
         cfg = yaml.safe_load(f)
     cfg["priority_neighborhoods"] = {
         int(k): v for k, v in (cfg.get("priority_neighborhoods") or {}).items()

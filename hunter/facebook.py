@@ -116,7 +116,7 @@ def load_groups(cfg: dict) -> list[dict]:
     groups = list(fb.get("groups") or [])
     gfile = ROOT / fb.get("groups_file", "data/fb_groups.yaml")
     if gfile.exists():
-        data = yaml.safe_load(gfile.read_text(encoding="utf-8")) or {}
+        data = yaml.safe_load(gfile.read_text(encoding="utf-8-sig")) or {}
         groups += [g for g in (data.get("groups") or []) if g.get("enabled", True)]
     out, seen = [], set()
     for g in groups:

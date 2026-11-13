@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 import random
 import time
 
@@ -9,7 +10,7 @@ from .scan import run_scan
 
 def main():
     p = argparse.ArgumentParser(prog="hunter", description="סוכן חיפוש דירות")
-    p.add_argument("command", choices=["scan", "loop", "fb-login", "fb-groups"],
+    p.add_argument("command", choices=["scan", "loop", "fb-login", "fb-groups", "setup-telegram", "check"],
                    help="scan = ריצה אחת · loop = כל X דקות · fb-login = התחברות לפייסבוק · "
                         "fb-groups = רשימת הקבוצות שלך לקובץ")
     p.add_argument("--config", default=None)
@@ -23,6 +24,19 @@ def main():
     cfg = load_config(args.config)
     if args.show_browser:
         cfg.setdefault("facebook", {})["headless"] = False
+
+    if args.command == "setup-telegram":
+        from .setup_tools import setup_telegram
+
+        setup_telegram()
+        return
+    if args.command == "check":
+        from .setup_tools import check_anthropic
+
+        check_anthropic()
+        print("[OK] Telegram configured." if os.environ.get("TELEGRAM_CHAT_ID")
+              else "[i] Telegram not configured yet (run 3-telegram.bat).")
+        return
 
     if args.command in ("fb-login", "fb-groups"):
         from .facebook import FacebookSource, write_groups_file
