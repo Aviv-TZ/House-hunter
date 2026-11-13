@@ -89,6 +89,15 @@ def test_bootstrap_then_only_new(monkeypatch, tmp_path):
     assert any("ירידת מחיר" in s for s in sent)
 
 
+def test_cheap_listings_rejected_and_never_opened(monkeypatch, tmp_path):
+    markers = [make_marker("c1", price=2000), make_marker("ok", price=6000)]
+    session = FakeSession(markers)
+    cfg, stats = run(monkeypatch, tmp_path, session, [])
+    db = DB(cfg["db_path"])
+    assert db.get("yad2:c1")["verdict"] == "reject" and db.get("yad2:c1")["details_fetched"] == 0
+    assert db.get("yad2:ok")["details_fetched"] == 1
+
+
 def test_block_keeps_progress(monkeypatch, tmp_path):
     markers = [make_marker("b1"), make_marker("b2")]
     sent = []

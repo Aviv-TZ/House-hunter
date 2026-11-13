@@ -89,12 +89,13 @@ class Yad2Client:
             return merged
         return markers
 
-    def iter_listings(self, region: int, cities: list[dict], min_rooms: float, max_price: int) -> Iterator[Listing]:
+    def iter_listings(self, region: int, cities: list[dict], min_rooms: float, max_price: int,
+                      min_price: int = 0) -> Iterator[Listing]:
         for city in cities:
             if self.blocked:
                 return
             try:
-                markers = self.search(region, city["id"], min_rooms, max_price)
+                markers = self.search(region, city["id"], min_rooms, max_price, min_price)
             except Yad2Blocked:
                 return
             for marker in markers:

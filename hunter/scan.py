@@ -68,17 +68,28 @@ class Pipeline:
 
 
 # ---------------------------------------------------------------- yad2
+def refresh_pending(cfg, db) -> None:
+    """Re-apply the rules to yad2 listings not opened yet (criteria may have changed)."""
+    for row in db.conn.execute("SELECT data FROM listings WHERE details_fetched=0 AND source='yad2' "
+                               "AND dup_of IS NULL").fetchall():
+        listing = Listing.from_dict(json.loads(row["data"]))
+        db.save_analysis(listing, analyze(listing, cfg).to_dict())
+    db.commit()
+
+
 def run_yad2(cfg, db, pipe: Pipeline, stats, price_drops) -> Optional[str]:
     s, run_cfg = cfg["search"], cfg["run"]
+    refresh_pending(cfg, db)
     client = Yad2Client(delay_seconds=run_cfg.get("delay_seconds", (4, 9)))
     try:
-        for listing in client.iter_listings(s["region"], s["cities"], s["min_rooms"], s["max_price"]):
+        for listing in client.iter_listings(s["region"], s["cities"], s["min_rooms"], s["max_price"],
+                                            s.get("min_price", 0)):
             stats["seen"] += 1
             is_new, old_price = db.upsert_seen(listing)
             if is_new:
                 stats["new"] += 1
-                if prefilter(listing, cfg):  # rejected from feed data alone - no need to open it
-                    db.save_analysis(listing, analyze(listing, cfg).to_dict())
+                # preliminary verdict from feed data; rejected ones are never opened
+                db.save_analysis(listing, analyze(listing, cfg).to_dict())
             elif old_price and listing.price and listing.price < old_price:
                 price_drops[listing.key] = old_price
         db.commit()

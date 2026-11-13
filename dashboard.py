@@ -70,6 +70,8 @@ st.caption(f"{len(view)} מודעות")
 for r in view[:200]:
     d, a = r["d"], r["a"]
     icon = {"match": "✅", "check": "🟡", "reject": "❌"}.get(r["verdict"], "⏳")
+    if not r["details_fetched"] and r["verdict"] != "reject":
+        icon = "⏳" + icon  # preliminary - not opened in depth yet
     star = "⭐ " if a.get("priority") else ""
     price = f"{r['price']:,} ₪" if r["price"] else "?"
     listing = Listing.from_dict(d)

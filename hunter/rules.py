@@ -100,6 +100,8 @@ def prefilter(listing: Listing, cfg: dict) -> list[str]:
         reasons.append("לא מודעת השכרה (מחפשים דירה / מכירה / סאבלט וכו')")
     if listing.city_id and listing.city_id not in allowed_cities:
         reasons.append(f"עיר לא ברשימה ({listing.city or 'אחר'})")
+    if listing.price and listing.price < s.get("min_price", 0):
+        reasons.append(f"מחיר לא סביר ({listing.price:,})")
     if listing.price and listing.price > s["max_price"]:
         reasons.append(f"מחיר {listing.price:,} מעל {s['max_price']:,}")
     if listing.rooms is not None and listing.rooms < s["min_rooms"]:

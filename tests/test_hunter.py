@@ -151,6 +151,13 @@ def test_db_new_and_price_drop(tmp_path):
 
 
 def test_suspicious_low_price(cfg):
-    l = full_listing(price=2300)
-    a = analyze(l, cfg)
+    a = analyze(full_listing(price=2300), cfg)
+    assert a.verdict == "reject" and any("לא סביר" in r for r in a.reasons)
+    a = analyze(full_listing(price=3800), cfg)
     assert a.verdict == "check" and any("חשוד" in f for f in a.flags)
+
+
+def test_unopened_listing_gets_preliminary_verdict(cfg):
+    from hunter.yad2 import listing_from_marker
+    cheap = listing_from_marker(dict(MARKER, price=1999))
+    assert analyze(cheap, cfg).verdict == "reject"
