@@ -161,3 +161,35 @@ def test_unopened_listing_gets_preliminary_verdict(cfg):
     from hunter.yad2 import listing_from_marker
     cheap = listing_from_marker(dict(MARKER, price=1999))
     assert analyze(cheap, cfg).verdict == "reject"
+
+
+ROOM_AD = ("מתפנה חדר גדול ומרווח בדירת 3 חדרי שינה וסלון ברמת גן *חדר גדול עם ארון קיר ענק, החדר מגיע ללא ריהוט "
+           "נוסף. * דירה מאובזרת לחלוטין. * בדירה נשארים שותפה ושותף. כניסה: תחילת נובמבר. שכר דירה: 2200 לחודש.")
+
+
+@pytest.mark.parametrize("text", [
+    ROOM_AD,
+    "בדירה נשארים שותפה ושותף",
+    "מחליפים שותפה בדירה מקסימה בגבעתיים",
+    "חדר להשכרה בבורוכוב",
+    "חדר מרוהט בדירת 4 חדרים, בדירה גרים עוד 2",
+    "דרושה שותפה לדירה ברמת גן",
+])
+def test_roommate_ads_detected(text):
+    assert keyword_signals(text)["roommate_ad"] is True
+
+
+@pytest.mark.parametrize("text", [
+    "דירת 4 חדרים מתאימה לשותפים, מטבח גדול",
+    "מתאים לדירת שותפים או למשפחה",
+    "3 חדרי שינה וסלון, חדר רחצה משופץ",
+    "דירה מקסימה, חדר שינה גדול עם ארון קיר",
+])
+def test_whole_apartment_not_roommate(text):
+    assert keyword_signals(text)["roommate_ad"] is False
+
+
+def test_room_ad_rejected(cfg):
+    meta = dict(ITEM["metaData"], description=ROOM_AD)
+    a = analyze(full_listing(metaData=meta, price=4200), cfg)
+    assert a.verdict == "reject" and any("שותפים" in r for r in a.reasons)
